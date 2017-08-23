@@ -208,10 +208,21 @@ class MyFireWall(app_manager.RyuApp):
 
         self.mac_to_port[dpid][src] = in_port
 
+# joon start
+#        if dst in self.mac_to_port[dpid]:
+#            out_port = self.mac_to_port[dpid][dst]
+#        else:
+#            out_port = ofproto.OFPP_FLOOD
         if dst in self.mac_to_port[dpid]:
             out_port = self.mac_to_port[dpid][dst]
+        elif in_port == 21:
+            out_port = 31
+        elif in_port == 31:
+            out_port = 21
         else:
             out_port = ofproto.OFPP_FLOOD
+# joon end
+
 
         actions = [parser.OFPActionOutput(out_port)]
         actions_drop = []
@@ -261,7 +272,7 @@ class MyFireWall(app_manager.RyuApp):
                 udp_sport = pkt_udp.src_port
                 udp_dport = pkt_udp.dst_port
 
-                matched_rule = self.comparison.compare(PROTOCOLS[ipProto], srcIp, dstIp, udp_sport, tcp_dport)
+                matched_rule = self.comparison.compare(PROTOCOLS[ipProto], srcIp, dstIp, udp_sport, udp_dport)
                 print "matched_rule: ", matched_rule
 
                 if not matched_rule:
@@ -269,7 +280,7 @@ class MyFireWall(app_manager.RyuApp):
 
                 if matched_rule['target'] == 'ACCEPT':
                     match = parser.OFPMatch(ipv4_src=srcIp, ipv4_dst=dstIp, ip_proto=ipProto,
-                                            udp_src=udp_sport, udp_dst=tcp_dport, eth_type=0x800)
+                                            udp_src=udp_sport, udp_dst=udp_dport, eth_type=0x800)
                     self.add_flow(datapath, 1, match, actions_forward, LIFETIME_ROUTE)
                     #  accept, forward action
                 elif matched_rule['target'] == 'DROP':
@@ -281,8 +292,14 @@ class MyFireWall(app_manager.RyuApp):
                     return
 
             else:
+                if PROTOCOLS.has_key(ipProto) is False: # joon
+                    return
                 matched_rule = self.comparison.compare(PROTOCOLS[ipProto], srcIp, dstIp)
                 print "matched_rule: ", matched_rule
+                # joon start
+                if not matched_rule:
+                    return
+                # joon end
 
                 print "Rule Target %s", matched_rule['target']
                 
@@ -296,6 +313,30 @@ class MyFireWall(app_manager.RyuApp):
                 else:
                     # for pkts without a matched rule
                     return
+
+        elif pkt_arp:
+            # install a flow to avoid packet_in next time
+            if out_port != ofproto.OFPP_FLOOD:
+                match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                # verify if we have a valid buffer_id, if yes avoid to send both
+                # flow_mod & packet_out
+                if msg.buffer_id != ofproto.OFP_NO_BUFFER:
+                    self.add_flow(datapath, 1, match, actions, msg.buffer_id)
+                    return
+                else:
+                    self.add_flow(datapath, 1, match, actions)
+        else: 
+            self.logger.info("Not IPv4, not ARP.... Forward anyway.")
+            # install a flow to avoid packet_in next time
+            if out_port != ofproto.OFPP_FLOOD:
+                match = parser.OFPMatch(in_port=in_port, eth_dst=dst)
+                # verify if we have a valid buffer_id, if yes avoid to send both
+                # flow_mod & packet_out
+                if msg.buffer_id != ofproto.OFP_NO_BUFFER:
+                    self.add_flow(datapath, 1, match, actions, msg.buffer_id)
+                    return
+                else:
+                    self.add_flow(datapath, 1, match, actions)
 
         data = None
         if msg.buffer_id == ofproto.OFP_NO_BUFFER:

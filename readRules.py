@@ -31,6 +31,8 @@ def createRule(cmdDic):
                 return None
             match.sport = cmdDic['-sport']
         rule.add_match(match)
+    else:  # joon
+        rule.protocol = 'ALL' # joon
     if '-m' in cmdDic:
         match = ipruleTest.Match(rule, cmdDic['-m'])
         if '-src-range' in cmdDic:

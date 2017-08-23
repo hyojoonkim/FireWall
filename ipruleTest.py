@@ -393,7 +393,8 @@ class Comparison(object):
                 dgroup = rule.dgroup
                 print "DGROUP: ", rule.dgroup
 
-                if proto != rule.protocol:
+                
+                if proto != rule.protocol and rule.protocol != 'ALL': # joon
                     continue
 
                 for match in rule._matches:
